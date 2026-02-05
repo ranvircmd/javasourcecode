@@ -1420,87 +1420,678 @@ function changePage(type, page) {
     }
 }
 
-/* ========================================
-   COURSE & NOTE ACTIONS
-======================================== */
+/* ═══════════════════════════════════════════════════════════════════════════
+   COURSE & NOTE ACTIONS + SMART DEEP SHARING
+   This includes your original functions + enhanced sharing
+═══════════════════════════════════════════════════════════════════════════ */
+
+// ═══════════════════════════════════════════════════════════════════════════
+// YOUR ORIGINAL FUNCTIONS (RESTORED)
+// ═══════════════════════════════════════════════════════════════════════════
+
 function viewCourse(url) {
     if (url && url !== '#') {
         window.open(url, '_blank');
-        checkAchievement('firstCourse');
+        if (typeof checkAchievement === 'function') {
+            checkAchievement('firstCourse');
+        }
     } else {
-        showNotification('Course URL not available', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('Course URL not available', 'error');
+        }
     }
 }
 
 function downloadNote(url, title) {
     if (url && url !== '#') {
         window.open(url, '_blank');
-        showNotification(`📥 Downloading: ${title}`, 'success');
-        checkAchievement('firstDownload');
+        if (typeof showNotification === 'function') {
+            showNotification('📥 Downloading: ' + title, 'success');
+        }
+        if (typeof checkAchievement === 'function') {
+            checkAchievement('firstDownload');
+        }
     } else {
-        showNotification('Download URL not available', 'error');
+        if (typeof showNotification === 'function') {
+            showNotification('Download URL not available', 'error');
+        }
     }
 }
 
-function shareCourse(title) {
-    shareContent('course', title);
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// SMART SHARE DATA STATE
+// ═══════════════════════════════════════════════════════════════════════════
 
-function shareNote(title) {
-    shareContent('note', title);
-}
+var CurrentShareData = {
+    type: 'page',
+    id: null,
+    title: '',
+    description: '',
+    image: '',
+    url: '',
+    resourceType: '',
+    // Navigation context
+    courseType: null,
+    branch: null,
+    semester: null,
+    subject: null
+};
 
-function shareContent(type, title) {
-    openModal('shareModal');
+// ═══════════════════════════════════════════════════════════════════════════
+// GENERATE DEEP SHARE URL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function generateDeepShareUrl() {
+    var baseUrl = window.location.origin + window.location.pathname;
+    var params = [];
     
-    const shareButtons = document.querySelectorAll('.share-btn');
-    shareButtons.forEach(btn => {
-        btn.onclick = () => handleShare(btn.dataset.platform, type, title);
+    // Add type and id (id is the title for finding the card)
+    if (CurrentShareData.type) {
+        params.push('type=' + encodeURIComponent(CurrentShareData.type));
+    }
+    if (CurrentShareData.title) {
+        params.push('id=' + encodeURIComponent(CurrentShareData.title));
+    }
+    
+    // Add current filter state for navigation
+    if (typeof AppState !== 'undefined') {
+        // For notes filters
+        if (typeof currentNotesCourseType !== 'undefined' && currentNotesCourseType && currentNotesCourseType !== 'all') {
+            params.push('courseType=' + encodeURIComponent(currentNotesCourseType));
+        }
+        if (typeof currentNotesBranch !== 'undefined' && currentNotesBranch && currentNotesBranch !== 'all') {
+            params.push('branch=' + encodeURIComponent(currentNotesBranch));
+        }
+        if (typeof currentNotesSemester !== 'undefined' && currentNotesSemester && currentNotesSemester !== 'all') {
+            params.push('semester=' + encodeURIComponent(currentNotesSemester));
+        }
+    }
+    
+    // Add description for preview
+    if (CurrentShareData.description) {
+        params.push('desc=' + encodeURIComponent(CurrentShareData.description.substring(0, 100)));
+    }
+    
+    // Add highlight flag
+    params.push('highlight=true');
+    
+    return baseUrl + '#/share?' + params.join('&');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UPDATE SHARE PREVIEW
+// ═══════════════════════════════════════════════════════════════════════════
+
+function updateSharePreview() {
+    var previewIcon = document.getElementById('sharePreviewIcon');
+    var previewTitle = document.getElementById('sharePreviewTitle');
+    var previewDesc = document.getElementById('sharePreviewDesc');
+    var previewBadge = document.getElementById('sharePreviewBadge');
+    
+    if (previewTitle) {
+        previewTitle.textContent = CurrentShareData.title || 'Resource';
+    }
+    
+    if (previewDesc) {
+        previewDesc.textContent = CurrentShareData.description || 'Check out this resource on JavaSourceCode!';
+    }
+    
+    if (previewBadge) {
+        previewBadge.textContent = CurrentShareData.resourceType || CurrentShareData.type || 'Resource';
+    }
+    
+    if (previewIcon) {
+        if (CurrentShareData.image) {
+            previewIcon.innerHTML = '<img src="' + CurrentShareData.image + '" alt="">';
+        } else {
+            var iconMap = {
+                'pdf': 'fa-file-pdf',
+                'video': 'fa-video',
+                'note': 'fa-sticky-note',
+                'notes': 'fa-sticky-note',
+                'course': 'fa-graduation-cap',
+                'subject': 'fa-book'
+            };
+            var iconClass = iconMap[(CurrentShareData.type || '').toLowerCase()] || 
+                           iconMap[(CurrentShareData.resourceType || '').toLowerCase()] || 
+                           'fa-file-alt';
+            previewIcon.innerHTML = '<i class="fas ' + iconClass + '"></i>';
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SHARE FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Share a course
+ */
+function shareCourse(title, courseType, branch, semester, image) {
+    CurrentShareData.type = 'course';
+    CurrentShareData.title = title || 'Course';
+    CurrentShareData.description = 'Check out this course: ' + title + ' on JavaSourceCode!';
+    CurrentShareData.image = image || '';
+    CurrentShareData.resourceType = 'Course';
+    CurrentShareData.courseType = courseType || null;
+    CurrentShareData.branch = branch || null;
+    CurrentShareData.semester = semester || null;
+    
+    openShareModal();
+}
+
+/**
+ * Share a note
+ */
+function shareNote(title, subject, courseType, branch, semester, image) {
+    CurrentShareData.type = 'note';
+    CurrentShareData.title = title || 'Note';
+    CurrentShareData.description = subject ? 
+        'Study material for ' + subject + ': ' + title :
+        'Check out this resource: ' + title;
+    CurrentShareData.image = image || '';
+    CurrentShareData.resourceType = 'PDF';
+    CurrentShareData.courseType = courseType || null;
+    CurrentShareData.branch = branch || null;
+    CurrentShareData.semester = semester || null;
+    
+    openShareModal();
+}
+
+/**
+ * Generic share content (backward compatible)
+ */
+function shareContent(type, title, description, image) {
+    CurrentShareData.type = type || 'resource';
+    CurrentShareData.title = title || 'Resource';
+    CurrentShareData.description = description || 'Check out this on JavaSourceCode!';
+    CurrentShareData.image = image || '';
+    CurrentShareData.resourceType = type || 'Resource';
+    
+    openShareModal();
+}
+
+/**
+ * Share current page/view
+ */
+function shareCurrentPage() {
+    var title = document.title || 'JavaSourceCode';
+    var description = 'Free programming resources and study materials';
+    
+    CurrentShareData.type = 'page';
+    CurrentShareData.title = title;
+    CurrentShareData.description = description;
+    CurrentShareData.resourceType = 'Page';
+    
+    openShareModal();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OPEN SHARE MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function openShareModal() {
+    // Generate deep URL
+    CurrentShareData.url = generateDeepShareUrl();
+    
+    // Update preview
+    updateSharePreview();
+    
+    // Update share link input
+    var shareLinkInput = document.getElementById('shareLink');
+    if (shareLinkInput) {
+        shareLinkInput.value = CurrentShareData.url;
+    }
+    
+    // Reset copy button
+    var copyBtn = document.getElementById('copyLinkBtn');
+    if (copyBtn) {
+        copyBtn.classList.remove('copied');
+        var copyBtnContent = copyBtn.querySelector('span') || copyBtn;
+        if (copyBtn.querySelector('i')) {
+            copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+        }
+    }
+    
+    // Open modal
+    if (typeof openModal === 'function') {
+        openModal('shareModal');
+    } else {
+        var modal = document.getElementById('shareModal');
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+        }
+    }
+    
+    // Setup share button handlers
+    setupShareButtonHandlers();
+    
+    console.log('📤 Share modal opened:', CurrentShareData);
+}
+
+function setupShareButtonHandlers() {
+    var shareButtons = document.querySelectorAll('#shareModal .share-btn');
+    shareButtons.forEach(function(btn) {
+        // Remove old listener and add new one
+        btn.onclick = function(e) {
+            e.preventDefault();
+            handleShare(btn.dataset.platform);
+        };
     });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// HANDLE SHARE TO PLATFORMS
+// ═══════════════════════════════════════════════════════════════════════════
+
 function handleShare(platform, type, title) {
-    const text = `Check out this ${type}: ${title} on JavaSourceCode!`;
-    const url = window.location.href;
+    var shareTitle = title || CurrentShareData.title || 'Resource';
+    var shareType = type || CurrentShareData.type || 'resource';
+    var shareUrl = CurrentShareData.url || window.location.href;
+    var shareDesc = CurrentShareData.description || '';
     
-    let shareUrl = '';
+    var text = '📚 ' + shareTitle;
+    if (shareDesc && shareDesc !== shareTitle) {
+        text += '\n' + shareDesc;
+    }
+    text += '\n\n🔗 ';
+    
+    var shareLink = '';
+    
     switch (platform) {
         case 'whatsapp':
-            shareUrl = `https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`;
+            shareLink = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(text + shareUrl);
             break;
         case 'facebook':
-            shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+            shareLink = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl) + '&quote=' + encodeURIComponent(text);
             break;
         case 'twitter':
-            shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+            shareLink = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent('📚 ' + shareTitle) + '&url=' + encodeURIComponent(shareUrl);
             break;
         case 'telegram':
-            shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+            shareLink = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(text);
             break;
         case 'linkedin':
-            shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+            shareLink = 'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl);
             break;
         case 'copy':
             copyShareLink();
             return;
+        case 'email':
+            var subject = '📚 ' + shareTitle + ' - JavaSourceCode';
+            var body = text + shareUrl;
+            window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+            closeShareModalSafe();
+            showShareToast('Opening email...');
+            return;
     }
     
-    if (shareUrl) {
-        window.open(shareUrl, '_blank', 'width=600,height=400');
-        closeModal('shareModal');
-        showNotification('Opened share dialog', 'success');
+    if (shareLink) {
+        window.open(shareLink, '_blank', 'width=600,height=500,scrollbars=yes');
+        closeShareModalSafe();
+        showShareToast('Opening ' + platform + '...');
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// COPY SHARE LINK
+// ═══════════════════════════════════════════════════════════════════════════
+
 function copyShareLink() {
-    const input = document.getElementById('shareLink');
-    if (input) {
+    var input = document.getElementById('shareLink');
+    var copyBtn = document.getElementById('copyLinkBtn');
+    
+    if (!input) return;
+    
+    var textToCopy = input.value || CurrentShareData.url || window.location.href;
+    
+    // Modern clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy).then(function() {
+            onCopySuccess();
+        }).catch(function() {
+            fallbackCopy();
+        });
+    } else {
+        fallbackCopy();
+    }
+    
+    function fallbackCopy() {
         input.select();
-        document.execCommand('copy');
-        showNotification('📋 Link copied to clipboard!', 'success');
-        closeModal('shareModal');
+        input.setSelectionRange(0, 99999);
+        try {
+            document.execCommand('copy');
+            onCopySuccess();
+        } catch (e) {
+            showShareToast('Failed to copy', 'error');
+        }
+    }
+    
+    function onCopySuccess() {
+        if (copyBtn) {
+            copyBtn.classList.add('copied');
+            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            copyBtn.style.background = '#10b981';
+            
+            setTimeout(function() {
+                copyBtn.classList.remove('copied');
+                copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+                copyBtn.style.background = '';
+            }, 2000);
+        }
+        
+        showShareToast('📋 Link copied to clipboard!');
+        
+        setTimeout(function() {
+            closeShareModalSafe();
+        }, 1500);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function closeShareModalSafe() {
+    if (typeof closeModal === 'function') {
+        closeModal('shareModal');
+    } else {
+        var modal = document.getElementById('shareModal');
+        if (modal) {
+            modal.classList.remove('active');
+            setTimeout(function() {
+                modal.style.display = 'none';
+            }, 300);
+        }
+    }
+}
+
+function showShareToast(message, type) {
+    // Try using existing notification function first
+    if (typeof showNotification === 'function') {
+        showNotification(message, type === 'error' ? 'error' : 'success');
+        return;
+    }
+    
+    // Custom toast
+    var toast = document.getElementById('shareToast');
+    var toastText = document.getElementById('shareToastText');
+    
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.className = 'share-toast';
+        toast.id = 'shareToast';
+        toast.innerHTML = '<i class="fas fa-check-circle"></i><span id="shareToastText"></span>';
+        document.body.appendChild(toast);
+        toastText = toast.querySelector('#shareToastText');
+    }
+    
+    var icon = toast.querySelector('i');
+    if (icon) {
+        icon.className = type === 'error' ? 'fas fa-times-circle' : 'fas fa-check-circle';
+        icon.style.color = type === 'error' ? '#ef4444' : '#10b981';
+    }
+    
+    if (toastText) {
+        toastText.textContent = message;
+    }
+    
+    toast.classList.add('show');
+    
+    setTimeout(function() {
+        toast.classList.remove('show');
+    }, 2500);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEEP LINK PARSER & HANDLER
+// ═══════════════════════════════════════════════════════════════════════════
+
+function parseShareDeepLink() {
+    var hash = window.location.hash;
+    
+    if (hash.indexOf('#/share?') === -1) return false;
+    
+    console.log('🔗 Share deep link detected:', hash);
+    
+    var queryPart = hash.split('?')[1];
+    if (!queryPart) return false;
+    
+    var params = new URLSearchParams(queryPart);
+    var type = params.get('type');
+    var id = params.get('id'); // This is the title
+    var courseType = params.get('courseType');
+    var branch = params.get('branch');
+    var semester = params.get('semester');
+    var highlight = params.get('highlight') === 'true';
+    
+    console.log('📦 Parsed params:', { type, id, courseType, branch, semester, highlight });
+    
+    // Wait for page to fully load and data to be ready
+    var attempts = 0;
+    var maxAttempts = 50;
+    
+    function tryProcess() {
+        attempts++;
+        
+        // Check if data is loaded
+        var hasData = typeof AppState !== 'undefined' && 
+                     ((AppState.notes && AppState.notes.length > 0) ||
+                      (AppState.courses && AppState.courses.length > 0) ||
+                      (AppState.filteredNotes && AppState.filteredNotes.length > 0));
+        
+        // Check if DOM is ready with cards
+        var hasCards = document.querySelectorAll('.note-card, .course-card').length > 0;
+        
+        if ((!hasData || !hasCards) && attempts < maxAttempts) {
+            setTimeout(tryProcess, 300);
+            return;
+        }
+        
+        console.log('✅ Ready to process deep link (attempt ' + attempts + ')');
+        
+        // Step 1: Apply filters if provided
+        if (courseType || branch || semester) {
+            applyDeepLinkFilters(courseType, branch, semester);
+        }
+        
+        // Step 2: Find and highlight the card
+        setTimeout(function() {
+            if (id && highlight) {
+                findAndHighlightCard(decodeURIComponent(id), type);
+            }
+        }, 500);
+        
+        // Step 3: Clean up URL
+        setTimeout(function() {
+            if (window.history && window.history.replaceState) {
+                history.replaceState(null, '', window.location.pathname);
+            }
+        }, 3000);
+    }
+    
+    setTimeout(tryProcess, 500);
+    return true;
+}
+
+function applyDeepLinkFilters(courseType, branch, semester) {
+    console.log('🔧 Applying filters:', { courseType, branch, semester });
+    
+    // Try to set filter values
+    if (courseType) {
+        var courseTypeSelect = document.querySelector('[data-filter="courseType"], #notesCourseType, #courseTypeFilter, select[name="courseType"]');
+        if (courseTypeSelect) {
+            courseTypeSelect.value = courseType;
+            // Trigger change event
+            courseTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        // Also set global variable if exists
+        if (typeof currentNotesCourseType !== 'undefined') {
+            window.currentNotesCourseType = courseType;
+        }
+    }
+    
+    if (branch) {
+        var branchSelect = document.querySelector('[data-filter="branch"], #notesBranch, #branchFilter, select[name="branch"]');
+        if (branchSelect) {
+            branchSelect.value = branch;
+            branchSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (typeof currentNotesBranch !== 'undefined') {
+            window.currentNotesBranch = branch;
+        }
+    }
+    
+    if (semester) {
+        var semesterSelect = document.querySelector('[data-filter="semester"], #notesSemester, #semesterFilter, select[name="semester"]');
+        if (semesterSelect) {
+            semesterSelect.value = semester;
+            semesterSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (typeof currentNotesSemester !== 'undefined') {
+            window.currentNotesSemester = semester;
+        }
+    }
+    
+    // Trigger filter apply if function exists
+    if (typeof applyNotesFilters === 'function') {
+        setTimeout(applyNotesFilters, 100);
+    }
+    if (typeof renderNotes === 'function') {
+        setTimeout(renderNotes, 200);
+    }
+}
+
+function findAndHighlightCard(searchTitle, type) {
+    if (!searchTitle) return false;
+    
+    var searchLower = searchTitle.toLowerCase().trim();
+    console.log('🔍 Looking for card with title:', searchTitle);
+    
+    // Get all cards
+    var cardSelectors = '.note-card, .course-card, .resource-card, [class*="card"]';
+    var cards = document.querySelectorAll(cardSelectors);
+    
+    console.log('📦 Found', cards.length, 'cards to search');
+    
+    var foundCard = null;
+    
+    for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        
+        // Look for title in various elements
+        var titleEl = card.querySelector('.note-title, .course-title, .card-title, .resource-title, h3, h4');
+        
+        if (titleEl) {
+            var cardTitle = (titleEl.textContent || titleEl.innerText || '').toLowerCase().trim();
+            
+            // Check for exact match or contains
+            if (cardTitle === searchLower || cardTitle.includes(searchLower) || searchLower.includes(cardTitle)) {
+                foundCard = card;
+                console.log('✅ Found matching card:', cardTitle);
+                break;
+            }
+        }
+    }
+    
+    if (foundCard) {
+        highlightCard(foundCard);
+        return true;
+    } else {
+        console.log('⚠️ Card not found for:', searchTitle);
+        showShareToast('Resource found! Scroll to view.', 'info');
+        return false;
+    }
+}
+
+function highlightCard(card) {
+    console.log('✨ Highlighting card');
+    
+    // Scroll into view
+    card.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+    });
+    
+    // Store original styles
+    var originalBoxShadow = card.style.boxShadow;
+    var originalTransform = card.style.transform;
+    var originalTransition = card.style.transition;
+    var originalZIndex = card.style.zIndex;
+    
+    // Apply highlight effect
+    card.style.transition = 'all 0.3s ease';
+    card.style.boxShadow = '0 0 0 4px #fbbf24, 0 0 30px rgba(251, 191, 36, 0.6), 0 0 60px rgba(251, 191, 36, 0.3)';
+    card.style.transform = 'scale(1.03)';
+    card.style.zIndex = '100';
+    
+    // Pulse animation
+    setTimeout(function() {
+        card.style.transform = 'scale(1.01)';
+    }, 300);
+    
+    setTimeout(function() {
+        card.style.transform = 'scale(1.02)';
+    }, 600);
+    
+    // Remove highlight after 3 seconds
+    setTimeout(function() {
+        card.style.boxShadow = originalBoxShadow || '';
+        card.style.transform = originalTransform || '';
+        card.style.zIndex = originalZIndex || '';
+        
+        setTimeout(function() {
+            card.style.transition = originalTransition || '';
+        }, 300);
+    }, 3000);
+    
+    showShareToast('📍 Found the shared resource!', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function initSmartSharing() {
+    function init() {
+        console.log('📤 Initializing Smart Sharing System...');
+        
+        // Parse deep link on page load
+        parseShareDeepLink();
+        
+        // Listen for hash changes
+        window.addEventListener('hashchange', function() {
+            parseShareDeepLink();
+        });
+        
+        console.log('✅ Smart Sharing System ready!');
+    }
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+
+// Log available functions
+console.log('════════════════════════════════════════════════════════════');
+console.log('📤 SMART SHARING + ORIGINAL FUNCTIONS LOADED');
+console.log('════════════════════════════════════════════════════════════');
+console.log('✅ viewCourse(url)');
+console.log('✅ downloadNote(url, title)');
+console.log('✅ shareCourse(title, courseType, branch, semester, image)');
+console.log('✅ shareNote(title, subject, courseType, branch, semester, image)');
+console.log('✅ shareContent(type, title, description, image)');
+console.log('✅ copyShareLink()');
+console.log('════════════════════════════════════════════════════════════');
+
+
+
+
+
+
 
 /* ========================================
    USER TRACKING & STREAK
@@ -1927,3 +2518,4 @@ console.log('%cWelcome Developer! 👋', 'color: #ec4899; font-size: 16px;');
 console.log('%cWith Thumbnail Support Enabled ✨', 'color: #06b6d4; font-size: 14px;');
 console.log('%cInterested in contributing? Contact: ranvirdevops@gmail.com', 'color: #10b981; font-size: 14px;');
 console.log('%cTotal Lines: 2200+ | Features: 50+', 'color: #f59e0b; font-size: 12px;');
+
